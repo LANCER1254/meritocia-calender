@@ -1,0 +1,228 @@
+
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>シンプル月間カレンダー（CSV対応）</title>
+<style>
+  :root { --bg:#0b0b10; --card:#131622; --text:#e6e8ef; --muted:#99a0b3; --accent:#6ea8fe; --grid:#1b2030; }
+  * { box-sizing: border-box; }
+  body { margin:0; font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Hiragino Kaku Gothic ProN", "Noto Sans JP", "Yu Gothic UI", "Meiryo", sans-serif; background:var(--bg); color:var(--text); }
+  header { padding: 16px; display:flex; flex-wrap:wrap; gap:12px; align-items:center; justify-content:space-between; background:#0f1220; border-bottom:1px solid var(--grid); position:sticky; top:0; z-index:10; }
+  .controls { display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
+  button { background:var(--card); color:var(--text); border:1px solid var(--grid); padding:8px 12px; border-radius:10px; cursor:pointer; }
+  button:hover { border-color: var(--accent); }
+  select, input[type="month"] { background:var(--card); color:var(--text); border:1px solid var(--grid); padding:8px 10px; border-radius:10px; }
+  .wrap { max-width:1100px; margin: 20px auto; padding: 0 16px 40px; }
+  .calendar { background:var(--card); border:1px solid var(--grid); border-radius:16px; overflow:hidden; box-shadow: 0 10px 35px rgba(0,0,0,.35); }
+  .weekdays, .grid { display:grid; grid-template-columns: repeat(7, 1fr); }
+  .weekdays div { padding:10px 8px; text-align:center; color:var(--muted); font-size:12px; letter-spacing:.08em; background:#11162a; border-bottom:1px solid var(--grid); }
+  .cell { min-height:110px; border-right:1px solid var(--grid); border-bottom:1px solid var(--grid); padding:8px; position:relative; }
+  .cell:nth-child(7n) { border-right:none; }
+  .date { font-size:12px; color:var(--muted); position:absolute; top:6px; right:8px; }
+  .today { outline:2px solid var(--accent); outline-offset:-2px; border-radius:12px; }
+  .event { margin-top:22px; font-size:12px; padding:6px 8px; border-radius:8px; border:1px solid var(--grid); background: #101527; }
+  .event a { color: var(--accent); text-decoration:none; }
+  .empty { color:#5f6780; text-align:center; padding:30px 12px; }
+  .footer { color:var(--muted); font-size:12px; margin-top:12px; text-align:right; }
+  .legend { display:flex; gap:8px; align-items:center; flex-wrap:wrap; color:var(--muted); font-size:12px; }
+  .badge { padding:2px 8px; background:#101527; border:1px solid var(--grid); border-radius:999px; }
+  .uploader { display:flex; gap:10px; align-items:center; }
+  .hint { color:var(--muted); font-size:12px; }
+</style>
+</head>
+<body>
+  <header>
+    <div class="controls">
+      <button id="prevBtn" aria-label="前の月">◀</button>
+      <input type="month" id="monthPicker" />
+      <button id="nextBtn" aria-label="次の月">▶</button>
+    </div>
+    <div class="controls uploader">
+      <input type="file" id="fileInput" accept=".csv" />
+      <div class="hint">CSV列: 日付(YYYY-MM-DD), 時間(HH:MM任意), タイトル, URL任意, 備考任意</div>
+    </div>
+  </header>
+  <div class="wrap">
+    <div class="calendar">
+      <div class="weekdays">
+        <div>日</div><div>月</div><div>火</div><div>水</div><div>木</div><div>金</div><div>土</div>
+      </div>
+      <div class="grid" id="grid"></div>
+    </div>
+    <div class="footer">
+      <span class="legend">
+        <span class="badge">本日 = 青枠</span>
+        <span class="badge">クリック不要・CSV読込だけで表示</span>
+      </span>
+    </div>
+    <div class="empty" id="emptyHint" style="display:none;">この月の予定はありません</div>
+  </div>
+
+<script>
+  // Utility: parse CSV without external libs
+  function parseCSV(text) {
+    // split lines; handle quoted commas simply
+    const lines = text.replace(/\r/g, '').split('\n').filter(l => l.trim().length > 0);
+    const header = lines[0].split(',').map(h => h.trim().replace(/^"|"$/g,''));
+    const rows = [];
+    for (let i = 1; i < lines.length; i++) {
+      const line = lines[i];
+      const cols = [];
+      let cur = '', inQ = false;
+      for (let c = 0; c < line.length; c++) {
+        const ch = line[c];
+        if (ch === '"') {
+          if (inQ && line[c+1] === '"') { cur += '"'; c++; }
+          else inQ = !inQ;
+        } else if (ch === ',' && !inQ) { cols.push(cur); cur = ''; }
+        else { cur += ch; }
+      }
+      cols.push(cur);
+      rows.push(Object.fromEntries(header.map((h, idx) => [h, (cols[idx] ?? '').trim().replace(/^"|"$/g,'')])));
+    }
+    return rows;
+  }
+
+  // State
+  let events = []; // {date:'YYYY-MM-DD', time:'', title:'', url:'', note:''}
+  let viewYear, viewMonth; // month: 0-11
+
+  const grid = document.getElementById('grid');
+  const monthPicker = document.getElementById('monthPicker');
+  const emptyHint = document.getElementById('emptyHint');
+
+  function ymd(d) { return d.toISOString().slice(0,10); }
+  function pad2(n) { return (n < 10 ? '0' : '') + n; }
+
+  function loadDefault() {
+    // Embedded default example to let the UI render even without a file
+    const sample = `日付,時間,タイトル,URL,備考
+2025-09-16,22:00,小説投稿 Ep.87,https://ncode.syosetu.com/n5775kn/,告知あり
+2025-09-17,19:00,Discord会議,,報酬ルール確認
+2025-09-18,,買い物,,日用品`;
+    setEventsFromCSV(sample);
+  }
+
+  function setEventsFromCSV(csvText) {
+    const rows = parseCSV(csvText);
+    // normalize headers in Japanese
+    events = rows.map(r => ({
+      date: (r["日付"] || r["date"] || "").slice(0,10),
+      time: r["時間"] || r["time"] || "",
+      title: r["タイトル"] || r["title"] || "",
+      url: r["URL"] || r["url"] || "",
+      note: r["備考"] || r["メモ"] || r["note"] || ""
+    })).filter(e => e.date && e.title);
+    render();
+  }
+
+  function render() {
+    if (viewYear === undefined || viewMonth === undefined) {
+      const now = new Date();
+      viewYear = now.getFullYear();
+      viewMonth = now.getMonth();
+    }
+    const first = new Date(viewYear, viewMonth, 1);
+    const last = new Date(viewYear, viewMonth + 1, 0);
+    monthPicker.value = first.toISOString().slice(0,7);
+
+    // Build grid
+    grid.innerHTML = "";
+    const startOffset = first.getDay(); // 0 sun
+    const totalCells = startOffset + last.getDate();
+    const todayStr = ymd(new Date());
+
+    for (let i = 0; i < totalCells; i++) {
+      const cell = document.createElement('div');
+      cell.className = 'cell';
+      if (i < startOffset) {
+        cell.style.background = '#0f1322';
+        cell.style.borderBottom = '1px solid var(--grid)';
+        grid.appendChild(cell);
+        continue;
+      }
+      const day = i - startOffset + 1;
+      const dateStr = `${viewYear}-${pad2(viewMonth+1)}-${pad2(day)}`;
+      const dateEl = document.createElement('div');
+      dateEl.className = 'date';
+      dateEl.textContent = String(day);
+      cell.appendChild(dateEl);
+
+      if (dateStr === todayStr) cell.classList.add('today');
+
+      // events of the day
+      const items = events.filter(e => e.date === dateStr);
+      if (items.length === 0) {
+        // leave empty
+      } else {
+        items.forEach(e => {
+          const ev = document.createElement('div');
+          ev.className = 'event';
+          const t = e.time ? `${e.time} ` : "";
+          const text = document.createElement('div');
+          if (e.url) {
+            const a = document.createElement('a');
+            a.href = e.url;
+            a.target = "_blank";
+            a.rel = "noopener noreferrer";
+            a.textContent = `${t}${e.title}`;
+            text.appendChild(a);
+          } else {
+            text.textContent = `${t}${e.title}`;
+          }
+          ev.appendChild(text);
+          if (e.note) {
+            const small = document.createElement('div');
+            small.style.color = 'var(--muted)';
+            small.style.marginTop = '4px';
+            small.style.fontSize = '11px';
+            small.textContent = e.note;
+            ev.appendChild(small);
+          }
+          cell.appendChild(ev);
+        });
+      }
+
+      grid.appendChild(cell);
+    }
+
+    // show empty hint if no events in this month
+    const monthStr = `${viewYear}-${pad2(viewMonth+1)}`;
+    const hasMonthEvents = events.some(e => e.date.startsWith(monthStr));
+    emptyHint.style.display = hasMonthEvents ? 'none' : 'block';
+  }
+
+  // Controls
+  document.getElementById('prevBtn').addEventListener('click', () => {
+    if (viewMonth === 0) { viewMonth = 11; viewYear--; } else { viewMonth--; }
+    render();
+  });
+  document.getElementById('nextBtn').addEventListener('click', () => {
+    if (viewMonth === 11) { viewMonth = 0; viewYear++; } else { viewMonth++; }
+    render();
+  });
+  monthPicker.addEventListener('change', (e) => {
+    const [y, m] = e.target.value.split('-').map(Number);
+    if (!isNaN(y) && !isNaN(m)) {
+      viewYear = y;
+      viewMonth = m - 1;
+      render();
+    }
+  });
+
+  // File loader
+  document.getElementById('fileInput').addEventListener('change', (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (ev) => setEventsFromCSV(ev.target.result);
+    reader.readAsText(file, 'utf-8');
+  });
+
+  // Init
+  loadDefault();
+</script>
+</body>
+</html>
