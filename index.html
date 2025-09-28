@@ -22,6 +22,7 @@ button:hover{border-color:var(--accent)}
 table{width:100%;border-collapse:collapse}
 th,td{border-bottom:1px solid var(--grid);padding:8px;text-align:left;font-size:14px}
 th{color:var(--muted)}
+.debug{margin-left:auto;font-size:12px;color:#9cf}
 </style>
 </head><body>
 <div class="wrap">
@@ -31,6 +32,7 @@ th{color:var(--muted)}
     <input type="month" id="monthPick">
     <button id="nextBtn">次月 →</button>
     <span id="count" class="status"></span>
+    <span id="dbg" class="debug"></span>
   </header>
 
   <div class="calendar">
@@ -49,53 +51,49 @@ th{color:var(--muted)}
   </div>
 </div>
 
+<!-- PapaParse（堅牢なCSVパーサ） -->
+<script src="https://unpkg.com/papaparse@5.4.1/papaparse.min.js"></script>
 <script>
 const CSV_URL = "https://raw.githubusercontent.com/LANCER1254/calendar-dataset/main/calendar_events.csv";
-function pad(n){return String(n).padStart(2,"0");}
-function ymdLocal(d){return d.getFullYear()+"-"+pad(d.getMonth()+1)+"-"+pad(d.getDate());}
-function pad(n){return String(n).padStart(2,"0");}
-function ymdLocal(d){return d.getFullYear()+"-"+pad(d.getMonth()+1)+"-"+pad(d.getDate());}
 document.getElementById('csvLink').href = CSV_URL;
 
+// ローカル日付で YYYY-MM-DD
+function pad(n){return String(n).padStart(2,'0')}
+function ymdLocal(d){return d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate())}
+function ymToVal(y,m){return y+'-'+pad(m)}
+function parseYM(v){const [y,m]=v.split('-').map(Number);return {y,m}}
+
+// CSV取得
 async function fetchCsvRows(){
   const res = await fetch(CSV_URL + '?t=' + Date.now());
   if(!res.ok) throw new Error('CSV fetch ' + res.status);
   const text = await res.text();
-  const lines = text.trim().split(/\r?\n/);   // ← 正しい改行分割
-  const headers = lines.shift().split(',');
-  const idx = {
-    date: headers.indexOf('date'),
-    title: headers.indexOf('title'),
-    location: headers.indexOf('location'),
-    notes: headers.indexOf('notes'),
-  };
-  const rows = lines.map(l=>{
-    const c = l.split(',');
-    return {
-      date:(c[idx.date]||'').trim(),
-      title:(c[idx.title]||'').trim(),
-      location:(c[idx.location]||'').trim(),
-      notes:(c[idx.notes]||'').trim(),
-    };
-  }).filter(r=>/^\d{4}-\d{2}-\d{2}$/.test(r.date));
+  const parsed = Papa.parse(text, { header:true, skipEmptyLines:true });
+  if (parsed.errors?.length){ console.warn('CSV parse warnings:', parsed.errors); }
+  const rows = parsed.data.map(r=>({
+    date:(r.date||'').trim(),
+    title:(r.title||'').trim(),
+    location:(r.location||'').trim(),
+    notes:(r.notes||'').trim(),
+  })).filter(r=>/^\d{4}-\d{2}-\d{2}$/.test(r.date));
   return rows;
 }
 
-// 最初に「CSVの最初のイベントの月」を開く
+// 初期表示は「CSVの最初のイベントの月」
 function initialYMFrom(rows){
   if(!rows.length){ const n=new Date(); return {y:n.getFullYear(), m:n.getMonth()+1}; }
-  rows.sort((a,b)=>a.date.localeCompare(b.date));
-  const [y,m] = rows[0].date.split('-').map(Number);
-  return {y, m};
+  const first = rows.slice().sort((a,b)=>a.date.localeCompare(b.date))[0].date;
+  const [y,m] = first.split('-').map(Number);
+  return {y,m};
 }
 
+// グリッド生成（ローカル日付）
 function buildGrid(y,m){
   const grid = document.getElementById('grid');
   grid.innerHTML = '';
   const first = new Date(y, m-1, 1);
-  const ymd = ymdLocal(d);
-
-  const totalCells = 42;               // 6週固定
+  const startWd = first.getDay(); // 日=0
+  const totalCells = 42; // 6週固定
   for(let i=0;i<totalCells;i++){
     const d = new Date(y, m-1, 1 - startWd + i);
     const ymd = ymdLocal(d);
@@ -109,12 +107,13 @@ function buildGrid(y,m){
     cell.appendChild(n);
 
     const today = new Date();
-    if(ymdLocal(today)===ymd) cell.classList.add('today');
+    if (ymdLocal(today) === ymd) cell.classList.add('today');
 
     grid.appendChild(cell);
   }
 }
 
+// イベント描画＋テーブル
 function renderEvents(rows){
   // テーブル（確認用）
   const tbody = document.querySelector('#eventsTable tbody');
@@ -123,13 +122,14 @@ function renderEvents(rows){
   document.getElementById('eventsTable').style.display = rows.length ? '' : 'none';
   document.getElementById('count').textContent = `読み込み成功：${rows.length}件`;
 
-  const map = {};
-  for(const r of rows) (map[r.date] ||= []).push(r);
+  // マスへ描画
+  const byDate = {};
+  for(const r of rows) (byDate[r.date] ||= []).push(r);
 
   document.querySelectorAll('.grid .cell').forEach(cell=>{
     cell.querySelectorAll('.event').forEach(e=>e.remove());
-    const items = map[cell.dataset.ymd] || [];
-    for(const ev of items){
+    const list = byDate[cell.dataset.ymd] || [];
+    for(const ev of list){
       const div = document.createElement('div');
       div.className='event';
       div.textContent = ev.title + (ev.location ? ' — ' + ev.location : '') + (ev.notes ? ' / ' + ev.notes : '');
@@ -138,36 +138,45 @@ function renderEvents(rows){
   });
 }
 
-function ymToVal(y,m){ return `${y}-${String(m).padStart(2,'0')}`; }
-function parseYM(v){ const [y,m]=v.split('-').map(Number); return {y,m}; }
-
+// 月操作
 const pick = document.getElementById('monthPick');
 const prev = document.getElementById('prevBtn');
 const next = document.getElementById('nextBtn');
+const dbg  = document.getElementById('dbg');
 
 async function renderMonth(y,m){
   buildGrid(y,m);
   const rows = await fetchCsvRows();
   renderEvents(rows);
+  dbg.textContent = `表示中: ${ymToVal(y,m)} / CSV最初: ${
+    rows.length ? rows.slice().sort((a,b)=>a.date.localeCompare(b.date))[0].date : 'なし'
+  }`;
 }
 
+// 初期化
 (async ()=>{
-  const rows = await fetchCsvRows();
-  const init = initialYMFrom(rows);               // ★最初からイベントのある月を開く
-  pick.value = ymToVal(init.y, init.m);
-  await renderMonth(init.y, init.m);
+  try{
+    const rows = await fetchCsvRows();
+    const init = initialYMFrom(rows);  // 初期月＝CSV最初
+    pick.value = ymToVal(init.y, init.m);
+    await renderMonth(init.y, init.m);
 
-  prev.onclick = async ()=>{
-    const {y,m}=parseYM(pick.value); const d=new Date(y,m-1,1); d.setMonth(d.getMonth()-1);
-    pick.value = ymToVal(d.getFullYear(), d.getMonth()+1);
-    await renderMonth(d.getFullYear(), d.getMonth()+1);
-  };
-  next.onclick = async ()=>{
-    const {y,m}=parseYM(pick.value); const d=new Date(y,m-1,1); d.setMonth(d.getMonth()+1);
-    pick.value = ymToVal(d.getFullYear(), d.getMonth()+1);
-    await renderMonth(d.getFullYear(), d.getMonth()+1);
-  };
-  pick.onchange = async ()=>{ const {y,m}=parseYM(pick.value); await renderMonth(y,m); };
+    prev.onclick = async ()=>{
+      const {y,m}=parseYM(pick.value); const d=new Date(y,m-1,1); d.setMonth(d.getMonth()-1);
+      pick.value = ymToVal(d.getFullYear(), d.getMonth()+1);
+      await renderMonth(d.getFullYear(), d.getMonth()+1);
+    };
+    next.onclick = async ()=>{
+      const {y,m}=parseYM(pick.value); const d=new Date(y,m-1,1); d.setMonth(d.getMonth()+1);
+      pick.value = ymToVal(d.getFullYear(), d.getMonth()+1);
+      await renderMonth(d.getFullYear(), d.getMonth()+1);
+    };
+    pick.onchange = async ()=>{ const {y,m}=parseYM(pick.value); await renderMonth(y,m); };
+  }catch(e){
+    console.error(e);
+    document.getElementById('count').textContent = 'エラー: ' + e.message;
+    dbg.textContent = 'スクリプト例外。Console参照';
+  }
 })();
 </script>
 </body></html>
