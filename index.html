@@ -51,6 +51,8 @@ th{color:var(--muted)}
 
 <script>
 const CSV_URL = "https://raw.githubusercontent.com/LANCER1254/calendar-dataset/main/calendar_events.csv";
+function pad(n){return String(n).padStart(2,"0");}
+function ymdLocal(d){return d.getFullYear()+"-"+pad(d.getMonth()+1)+"-"+pad(d.getDate());}
 document.getElementById('csvLink').href = CSV_URL;
 
 async function fetchCsvRows(){
@@ -93,7 +95,7 @@ function buildGrid(y,m){
   const totalCells = 42;               // 6週固定
   for(let i=0;i<totalCells;i++){
     const d = new Date(y, m-1, 1 - startWd + i);
-    const ymd = d.toISOString().slice(0,10);
+    const ymd = ymdLocal(d);
     const cell = document.createElement('div');
     cell.className='cell';
     cell.dataset.ymd=ymd;
@@ -104,7 +106,7 @@ function buildGrid(y,m){
     cell.appendChild(n);
 
     const today = new Date();
-    if(today.toISOString().slice(0,10)===ymd) cell.classList.add('today');
+    if(ymdLocal(today)===ymd) cell.classList.add('today');
 
     grid.appendChild(cell);
   }
