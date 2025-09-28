@@ -91,7 +91,8 @@ function buildGrid(y,m){
   const grid = document.getElementById('grid');
   grid.innerHTML = '';
   const first = new Date(y, m-1, 1);
-  const startWd = first.getDay();      // 日=0
+  const ymd = ymdLocal(d);
+
   const totalCells = 42;               // 6週固定
   for(let i=0;i<totalCells;i++){
     const d = new Date(y, m-1, 1 - startWd + i);
