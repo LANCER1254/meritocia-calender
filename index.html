@@ -53,6 +53,8 @@ th{color:var(--muted)}
 const CSV_URL = "https://raw.githubusercontent.com/LANCER1254/calendar-dataset/main/calendar_events.csv";
 function pad(n){return String(n).padStart(2,"0");}
 function ymdLocal(d){return d.getFullYear()+"-"+pad(d.getMonth()+1)+"-"+pad(d.getDate());}
+function pad(n){return String(n).padStart(2,"0");}
+function ymdLocal(d){return d.getFullYear()+"-"+pad(d.getMonth()+1)+"-"+pad(d.getDate());}
 document.getElementById('csvLink').href = CSV_URL;
 
 async function fetchCsvRows(){
