@@ -55,6 +55,8 @@ th{color:var(--muted)}
 <script src="https://unpkg.com/papaparse@5.4.1/papaparse.min.js"></script>
 <script>
 const CSV_URL = "https://raw.githubusercontent.com/LANCER1254/calendar-dataset/main/calendar_events.csv";
+const __dbgEl=document.getElementById("dbg")||document.getElementById("count");
+if(__dbgEl){ __dbgEl.textContent = "JS起動: " + new Date().toLocaleString(); }
 document.getElementById('csvLink').href = CSV_URL;
 
 // ローカル日付で YYYY-MM-DD
@@ -76,7 +78,7 @@ async function fetchCsvRows(){
     location:(r.location||'').trim(),
     notes:(r.notes||'').trim(),
   })).filter(r=>/^\d{4}-\d{2}-\d{2}$/.test(r.date));
-  return rows;
+  if(__dbgEl){ __dbgEl.textContent += " | CSV行数:"+rows.length; } return rows;
 }
 
 // 初期表示は「CSVの最初のイベントの月」
@@ -148,7 +150,7 @@ async function renderMonth(y,m){
   buildGrid(y,m);
   const rows = await fetchCsvRows();
   renderEvents(rows);
-  dbg.textContent = `表示中: ${ymToVal(y,m)} / CSV最初: ${
+  if(__dbgEl){ __dbgEl.textContent += " | 月描画OK"; } dbg.textContent = `表示中: ${ymToVal(y,m)} / CSV最初: ${
     rows.length ? rows.slice().sort((a,b)=>a.date.localeCompare(b.date))[0].date : 'なし'
   }`;
 }
