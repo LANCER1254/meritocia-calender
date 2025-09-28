@@ -224,5 +224,33 @@
   // Init
   loadDefault();
 </script>
-</body>
+</body><!-- イベント表示領域 -->
+<div id="events"></div>
+
+<script src="https://unpkg.com/papaparse@5.4.1/papaparse.min.js"></script>
+<script>
+  const CSV_URL = "https://raw.githubusercontent.com/LANCER1254/calendar-dataset/main/calendar_events.csv";
+
+  fetch(CSV_URL + '?t=' + Date.now())
+    .then(res => res.text())
+    .then(text => {
+      const parsed = Papa.parse(text, { header: true, skipEmptyLines: true });
+      const events = parsed.data;
+      const html = `
+        <table border="1" cellpadding="6" cellspacing="0">
+          <tr><th>Date</th><th>Title</th><th>Location</th><th>Notes</th></tr>
+          ${events.map(ev => `
+            <tr>
+              <td>${ev.date || ''}</td>
+              <td>${ev.title || ''}</td>
+              <td>${ev.location || ''}</td>
+              <td>${ev.notes || ''}</td>
+            </tr>
+          `).join('')}
+        </table>
+      `;
+      document.getElementById("events").innerHTML = html;
+    });
+</script>
+
 </html>
