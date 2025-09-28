@@ -1,189 +1,168 @@
-<!DOCTYPE html>
-<html lang="ja">
-<head>
-<meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1" />
+<!DOCTYPE html><html lang="ja"><head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Meritocracia Calendar（CSV → 月間カレンダー）</title>
 <style>
-  :root{--bg:#0b0b10;--card:#131622;--text:#e6e8ef;--muted:#99a0b3;--grid:#22263a;--accent:#6ea8fe}
-  *{box-sizing:border-box} body{margin:0;background:var(--bg);color:var(--text);font-family:ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,"Noto Sans JP",Arial}
-  .wrap{max-width:1000px;margin:24px auto;padding:0 16px}
-  header{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:12px}
-  header h1{font-size:18px;margin:0}
-  button, input[type="month"]{background:var(--card);color:var(--text);border:1px solid var(--grid);padding:6px 10px;border-radius:8px}
-  button:hover{border-color:var(--accent)}
-  .calendar{background:var(--card);border:1px solid var(--grid);border-radius:14px;overflow:hidden}
-  .weekdays,.grid{display:grid;grid-template-columns:repeat(7,1fr)}
-  .weekdays div{padding:10px 8px;text-align:center;color:var(--muted);font-size:12px;border-bottom:1px solid var(--grid)}
-  .cell{min-height:120px;border-right:1px solid var(--grid);border-bottom:1px solid var(--grid);position:relative;padding:6px}
-  .cell:nth-child(7n){border-right:none}
-  .date{position:absolute;top:6px;right:8px;font-size:12px;color:var(--muted)}
-  .today{outline:2px solid var(--accent);outline-offset:-2px;border-radius:10px}
-  .event{margin-top:22px;font-size:12px;padding:6px 8px;border-radius:8px;border:1px solid var(--grid);background:#0f1530}
-  .status{color:var(--muted);font-size:12px;margin-top:8px}
-  .tablecard{background:var(--card);border:1px solid var(--grid);border-radius:14px;padding:12px;margin-top:16px}
-  table{width:100%;border-collapse:collapse}
-  th,td{border-bottom:1px solid var(--grid);padding:8px;text-align:left;font-size:14px}
-  th{color:var(--muted)}
+:root{--bg:#0b0b10;--card:#131622;--text:#e6e8ef;--muted:#99a0b3;--grid:#22263a;--accent:#6ea8fe}
+*{box-sizing:border-box} body{margin:0;background:var(--bg);color:var(--text);font-family:ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,"Noto Sans JP",Arial}
+.wrap{max-width:1000px;margin:24px auto;padding:0 16px}
+header{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:12px}
+header h1{font-size:18px;margin:0}
+button,input[type="month"]{background:var(--card);color:var(--text);border:1px solid var(--grid);padding:6px 10px;border-radius:8px}
+button:hover{border-color:var(--accent)}
+.calendar{background:var(--card);border:1px solid var(--grid);border-radius:14px;overflow:hidden}
+.weekdays,.grid{display:grid;grid-template-columns:repeat(7,1fr)}
+.weekdays div{padding:10px 8px;text-align:center;color:var(--muted);font-size:12px;border-bottom:1px solid var(--grid)}
+.cell{min-height:120px;border-right:1px solid var(--grid);border-bottom:1px solid var(--grid);position:relative;padding:6px}
+.cell:nth-child(7n){border-right:none}
+.date{position:absolute;top:6px;right:8px;font-size:12px;color:var(--muted)}
+.today{outline:2px solid var(--accent);outline-offset:-2px;border-radius:10px}
+.event{margin-top:22px;font-size:12px;padding:6px 8px;border-radius:8px;border:1px solid var(--grid);background:#0f1530}
+.status{color:var(--muted);font-size:12px;margin-top:8px}
+.tablecard{background:var(--card);border:1px solid var(--grid);border-radius:14px;padding:12px;margin-top:16px}
+table{width:100%;border-collapse:collapse}
+th,td{border-bottom:1px solid var(--grid);padding:8px;text-align:left;font-size:14px}
+th{color:var(--muted)}
 </style>
-</head>
-<body>
-  <div class="wrap">
-    <header>
-      <h1>Meritocracia Calendar</h1>
-      <button id="prevBtn">← 前月</button>
-      <input type="month" id="monthPick">
-      <button id="nextBtn">次月 →</button>
-      <span id="count" class="status"></span>
-    </header>
+</head><body>
+<div class="wrap">
+  <header>
+    <h1>Meritocracia Calendar</h1>
+    <button id="prevBtn">← 前月</button>
+    <input type="month" id="monthPick">
+    <button id="nextBtn">次月 →</button>
+    <span id="count" class="status"></span>
+  </header>
 
-    <div class="calendar">
-      <div class="weekdays">
-        <div>日</div><div>月</div><div>火</div><div>水</div><div>木</div><div>金</div><div>土</div>
-      </div>
-      <div class="grid" id="grid"></div>
+  <div class="calendar">
+    <div class="weekdays">
+      <div>日</div><div>月</div><div>火</div><div>水</div><div>木</div><div>金</div><div>土</div>
     </div>
-
-    <div class="tablecard">
-      <div class="status">CSV: <a id="csvLink" target="_blank" rel="noopener">open raw</a></div>
-      <table id="eventsTable" style="display:none">
-        <thead><tr><th>Date</th><th>Title</th><th>Location</th><th>Notes</th></tr></thead>
-        <tbody></tbody>
-      </table>
-    </div>
+    <div class="grid" id="grid"></div>
   </div>
 
-  <script>
-    const CSV_URL = "https://raw.githubusercontent.com/LANCER1254/calendar-dataset/main/calendar_events.csv";
-    document.getElementById('csvLink').href = CSV_URL;
+  <div class="tablecard">
+    <div class="status">CSV: <a id="csvLink" target="_blank" rel="noopener">open raw</a></div>
+    <table id="eventsTable" style="display:none">
+      <thead><tr><th>Date</th><th>Title</th><th>Location</th><th>Notes</th></tr></thead>
+      <tbody></tbody>
+    </table>
+  </div>
+</div>
 
-    // ---- CSV を取る（ヘッダ: date,title,location,notes）----
-    async function fetchCsvRows() {
-      const res = await fetch(CSV_URL + '?t=' + Date.now());
-      if (!res.ok) throw new Error('CSV fetch ' + res.status);
-      const text = await res.text();
-      const lines = text.trim().split(/\\r?\\n/);
-      const headers = lines.shift().split(',');
-      const idx = {
-        date: headers.indexOf('date'),
-        title: headers.indexOf('title'),
-        location: headers.indexOf('location'),
-        notes: headers.indexOf('notes'),
-      };
-      return lines.map(l => {
-        const c = l.split(',');
-        return {
-          date: (c[idx.date]||'').trim(),
-          title: (c[idx.title]||'').trim(),
-          location: (c[idx.location]||'').trim(),
-          notes: (c[idx.notes]||'').trim(),
-        };
-      }).filter(r => /^\\d{4}-\\d{2}-\\d{2}$/.test(r.date));
+<script>
+const CSV_URL = "https://raw.githubusercontent.com/LANCER1254/calendar-dataset/main/calendar_events.csv";
+document.getElementById('csvLink').href = CSV_URL;
+
+async function fetchCsvRows(){
+  const res = await fetch(CSV_URL + '?t=' + Date.now());
+  if(!res.ok) throw new Error('CSV fetch ' + res.status);
+  const text = await res.text();
+  const lines = text.trim().split(/\r?\n/);   // ← 正しい改行分割
+  const headers = lines.shift().split(',');
+  const idx = {
+    date: headers.indexOf('date'),
+    title: headers.indexOf('title'),
+    location: headers.indexOf('location'),
+    notes: headers.indexOf('notes'),
+  };
+  const rows = lines.map(l=>{
+    const c = l.split(',');
+    return {
+      date:(c[idx.date]||'').trim(),
+      title:(c[idx.title]||'').trim(),
+      location:(c[idx.location]||'').trim(),
+      notes:(c[idx.notes]||'').trim(),
+    };
+  }).filter(r=>/^\d{4}-\d{2}-\d{2}$/.test(r.date));
+  return rows;
+}
+
+// 最初に「CSVの最初のイベントの月」を開く
+function initialYMFrom(rows){
+  if(!rows.length){ const n=new Date(); return {y:n.getFullYear(), m:n.getMonth()+1}; }
+  rows.sort((a,b)=>a.date.localeCompare(b.date));
+  const [y,m] = rows[0].date.split('-').map(Number);
+  return {y, m};
+}
+
+function buildGrid(y,m){
+  const grid = document.getElementById('grid');
+  grid.innerHTML = '';
+  const first = new Date(y, m-1, 1);
+  const startWd = first.getDay();      // 日=0
+  const totalCells = 42;               // 6週固定
+  for(let i=0;i<totalCells;i++){
+    const d = new Date(y, m-1, 1 - startWd + i);
+    const ymd = d.toISOString().slice(0,10);
+    const cell = document.createElement('div');
+    cell.className='cell';
+    cell.dataset.ymd=ymd;
+
+    const n = document.createElement('div');
+    n.className='date';
+    n.textContent = d.getDate();
+    cell.appendChild(n);
+
+    const today = new Date();
+    if(today.toISOString().slice(0,10)===ymd) cell.classList.add('today');
+
+    grid.appendChild(cell);
+  }
+}
+
+function renderEvents(rows){
+  // テーブル（確認用）
+  const tbody = document.querySelector('#eventsTable tbody');
+  tbody.innerHTML = rows.slice().sort((a,b)=>a.date.localeCompare(b.date))
+    .map(r=>`<tr><td>${r.date}</td><td>${r.title}</td><td>${r.location}</td><td>${r.notes}</td></tr>`).join('');
+  document.getElementById('eventsTable').style.display = rows.length ? '' : 'none';
+  document.getElementById('count').textContent = `読み込み成功：${rows.length}件`;
+
+  const map = {};
+  for(const r of rows) (map[r.date] ||= []).push(r);
+
+  document.querySelectorAll('.grid .cell').forEach(cell=>{
+    cell.querySelectorAll('.event').forEach(e=>e.remove());
+    const items = map[cell.dataset.ymd] || [];
+    for(const ev of items){
+      const div = document.createElement('div');
+      div.className='event';
+      div.textContent = ev.title + (ev.location ? ' — ' + ev.location : '') + (ev.notes ? ' / ' + ev.notes : '');
+      cell.appendChild(div);
     }
+  });
+}
 
-    // ---- グリッド生成＆スタンプ ----
-    function buildGrid(y, m) {
-      const grid = document.getElementById('grid');
-      grid.innerHTML = '';
-      const first = new Date(y, m-1, 1);
-      const startWd = first.getDay(); // 日=0
-      const daysInMonth = new Date(y, m, 0).getDate();
+function ymToVal(y,m){ return `${y}-${String(m).padStart(2,'0')}`; }
+function parseYM(v){ const [y,m]=v.split('-').map(Number); return {y,m}; }
 
-      // カレンダーは6行×7列=42セルで安定
-      const totalCells = 42;
-      for (let i=0; i<totalCells; i++) {
-        const d = new Date(y, m-1, 1 - startWd + i);
-        const ymd = d.toISOString().slice(0,10);
-        const cell = document.createElement('div');
-        cell.className = 'cell';
-        cell.dataset.ymd = ymd;
+const pick = document.getElementById('monthPick');
+const prev = document.getElementById('prevBtn');
+const next = document.getElementById('nextBtn');
 
-        const n = document.createElement('div');
-        n.className = 'date';
-        n.textContent = d.getDate();
-        cell.appendChild(n);
+async function renderMonth(y,m){
+  buildGrid(y,m);
+  const rows = await fetchCsvRows();
+  renderEvents(rows);
+}
 
-        // 今日のハイライト
-        const today = new Date();
-        if (today.toISOString().slice(0,10) === ymd) cell.classList.add('today');
+(async ()=>{
+  const rows = await fetchCsvRows();
+  const init = initialYMFrom(rows);               // ★最初からイベントのある月を開く
+  pick.value = ymToVal(init.y, init.m);
+  await renderMonth(init.y, init.m);
 
-        grid.appendChild(cell);
-      }
-    }
-
-    function renderEventsToGrid(rows) {
-      const map = {};
-      for (const r of rows) (map[r.date] ||= []).push(r);
-
-      // テーブルにも表示（デバッグ用）
-      const tbody = document.querySelector('#eventsTable tbody');
-      tbody.innerHTML = rows
-        .slice().sort((a,b)=>a.date.localeCompare(b.date))
-        .map(r => \`<tr><td>\${r.date}</td><td>\${r.title}</td><td>\${r.location}</td><td>\${r.notes}</td></tr>\`).join('');
-      document.getElementById('eventsTable').style.display = rows.length ? '' : 'none';
-      document.getElementById('count').textContent = \`読み込み成功：\${rows.length}件\`;
-
-      // マスへ描画
-      document.querySelectorAll('.grid .cell').forEach(cell => {
-        // 既存のイベント表示をクリア
-        cell.querySelectorAll('.event').forEach(e => e.remove());
-        const ymd = cell.dataset.ymd;
-        const items = map[ymd] || [];
-        for (const ev of items) {
-          const div = document.createElement('div');
-          div.className = 'event';
-          div.textContent = ev.title + (ev.location ? ' — ' + ev.location : '') + (ev.notes ? ' / ' + ev.notes : '');
-          cell.appendChild(div);
-        }
-      });
-    }
-
-    // ---- 月操作 ----
-    const pick = document.getElementById('monthPick');
-    const prev = document.getElementById('prevBtn');
-    const next = document.getElementById('nextBtn');
-
-    function currentYM() {
-      const now = new Date();
-      return { y: now.getFullYear(), m: now.getMonth()+1 };
-    }
-
-    function parseYM(v) {
-      const [y, m] = v.split('-').map(Number);
-      return { y, m };
-    }
-
-    function ymToVal(y,m){ return \`\${y}-\${String(m).padStart(2,'0')}\`; }
-
-    async function renderMonth(y,m) {
-      buildGrid(y,m);
-      const rows = await fetchCsvRows();
-      renderEventsToGrid(rows);
-    }
-
-    // 初期化
-    (async () => {
-      const {y,m} = currentYM();
-      pick.value = ymToVal(y,m);
-      await renderMonth(y,m);
-
-      prev.onclick = async () => {
-        const {y,m} = parseYM(pick.value);
-        const d = new Date(y, m-1, 1); d.setMonth(d.getMonth()-1);
-        pick.value = ymToVal(d.getFullYear(), d.getMonth()+1);
-        await renderMonth(d.getFullYear(), d.getMonth()+1);
-      };
-      next.onclick = async () => {
-        const {y,m} = parseYM(pick.value);
-        const d = new Date(y, m-1, 1); d.setMonth(d.getMonth()+1);
-        pick.value = ymToVal(d.getFullYear(), d.getMonth()+1);
-        await renderMonth(d.getFullYear(), d.getMonth()+1);
-      };
-      pick.onchange = async () => {
-        const {y,m} = parseYM(pick.value);
-        await renderMonth(y,m);
-      };
-    })();
-  </script>
-</body>
-</html>
+  prev.onclick = async ()=>{
+    const {y,m}=parseYM(pick.value); const d=new Date(y,m-1,1); d.setMonth(d.getMonth()-1);
+    pick.value = ymToVal(d.getFullYear(), d.getMonth()+1);
+    await renderMonth(d.getFullYear(), d.getMonth()+1);
+  };
+  next.onclick = async ()=>{
+    const {y,m}=parseYM(pick.value); const d=new Date(y,m-1,1); d.setMonth(d.getMonth()+1);
+    pick.value = ymToVal(d.getFullYear(), d.getMonth()+1);
+    await renderMonth(d.getFullYear(), d.getMonth()+1);
+  };
+  pick.onchange = async ()=>{ const {y,m}=parseYM(pick.value); await renderMonth(y,m); };
+})();
+</script>
+</body></html>
