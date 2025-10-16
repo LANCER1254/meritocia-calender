@@ -1,0 +1,99 @@
+name: Generate ICS Calendar
+on:
+  schedule:
+    - cron: '0 * * * *'  # 毎時実行（必要なら毎日1回などに変更可）
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install dependencies
+        run: npm install node-fetch ics
+
+      - name: Generate calendar
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          node <<'EOF'
+          import fetch from 'node-fetch';
+          import { createEvents } from 'ics';
+          import fs from 'fs';
+
+          const query = `
+            {
+              user(login: "LANCER1254") {
+                projectV2(number: 1) {  # ← あなたのProject番号（多分1でOK）
+                  items(first: 100) {
+                    nodes {
+                      content {
+                        ... on Issue {
+                          title
+                          url
+                        }
+                      }
+                      fieldValues(first: 10) {
+                        nodes {
+                          ... on ProjectV2ItemFieldDateValue {
+                            date
+                            field {
+                              name
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          `;
+
+          const headers = {
+            "Authorization": "Bearer ${process.env.GH_TOKEN}",
+            "Content-Type": "application/json"
+          };
+
+          const res = await fetch('https://api.github.com/graphql', {
+            method: 'POST',
+            headers,
+            body: JSON.stringify({ query })
+          });
+
+          const data = await res.json();
+          const items = data.data.user.projectV2.items.nodes;
+
+          const events = items
+            .filter(i => i.fieldValues.nodes.some(f => f.field.name === '締切日'))
+            .map(i => {
+              const dateStr = i.fieldValues.nodes.find(f => f.field.name === '締切日').date;
+              const date = new Date(dateStr);
+              return {
+                title: i.content?.title || 'No title',
+                start: [date.getFullYear(), date.getMonth() + 1, date.getDate()],
+                duration: { days: 1 },
+                description: i.content?.url
+              };
+            });
+
+          const { error, value } = createEvents(events);
+          if (error) throw error;
+
+          fs.mkdirSync('calendar', { recursive: true });
+          fs.writeFileSync('calendar/meritocracia.ics', value);
+          EOF
+
+      - name: Deploy to Pages
+        uses: peaceiris/actions-gh-pages@v3
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./calendar
