@@ -1,0 +1,69 @@
+name: ProjectV2 Debug + Fetch
+
+on:
+  workflow_dispatch:
+    inputs:
+      owner:
+        description: "Project owner (user login or org name)"
+        required: true
+        default: "LANCER1254"
+      number:
+        description: "Project (v2) number"
+        required: true
+        default: "1"
+
+permissions:
+  contents: read
+  issues: read
+  pull-requests: read
+  projects: read
+
+jobs:
+  debug:
+    runs-on: ubuntu-latest
+    env:
+      OWNER: ${{ github.event.inputs.owner }}
+      NUMBER: ${{ github.event.inputs.number }}
+      GH_TOKEN: ${{ secrets.PAT_PROJECTS_READ || github.token }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Viewer sanity check (token validity)
+        run: |
+          set -e
+          curl -sS https://api.github.com/graphql \
+            -H "Authorization: bearer $GH_TOKEN" \
+            -H "Content-Type: application/json" \
+            -d '{"query":"query { viewer { login }, rateLimit { remaining resetAt } }"}' | jq .
+
+      - name: Probe USER project
+        run: |
+          set -e
+          curl -sS https://api.github.com/graphql \
+            -H "Authorization: bearer $GH_TOKEN" \
+            -H "Content-Type: application/json" \
+            -d "{\"query\":\"query(\$login:String!,\$number:Int!){ user(login:\$login){ projectV2(number:\$number){ id title } } }\",\"variables\":{\"login\":\"$OWNER\",\"number\":$NUMBER}}" | jq .
+
+      - name: Probe ORG project
+        run: |
+          set -e
+          curl -sS https://api.github.com/graphql \
+            -H "Authorization: bearer $GH_TOKEN" \
+            -H "Content-Type: application/json" \
+            -d "{\"query\":\"query(\$login:String!,\$number:Int!){ organization(login:\$login){ projectV2(number:\$number){ id title } } }\",\"variables\":{\"login\":\"$OWNER\",\"number\":$NUMBER}}" | jq .
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install deps
+        run: |
+          npm init -y >/dev/null 2>&1 || true
+          npm install node-fetch@3
+
+      - name: Run safe fetch script
+        env:
+          GITHUB_TOKEN: ${{ env.GH_TOKEN }}
+          PROJECT_OWNER: ${{ env.OWNER }}
+          PROJECT_NUMBER: ${{ env.NUMBER }}
+        run: node script/fetch-projectv2.js
